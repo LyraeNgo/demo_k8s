@@ -1,0 +1,97 @@
+version: "3.9"
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: demo-frontend
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+      APP_ENV: ${APP_ENV:-mock}
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: demo-backend
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      APP_ENV: ${APP_ENV:-mock}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-demo-k8s-backend}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+    depends_on:
+      - otel-collector
+    networks:
+      - app-network
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:${CLICKHOUSE_TAG:-23.8.8-alpine}
+    container_name: demo-clickhouse
+    ports:
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+      - "${CLICKHOUSE_NATIVE_PORT:-9000}:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    ulimits:
+      nofile: 262144
+    networks:
+      - app-network
+
+  query-service:
+    image: signoz/query-service:${SIGNOZ_TAG:-0.57.0}
+    container_name: demo-signoz-query
+    environment:
+      CLICKHOUSE_SERVER: clickhouse
+      CLICKHOUSE_PORT: 9000
+      QUERY_SERVICE_PORT: 8080
+      SIGNOZ_REGION: ${SIGNOZ_REGION:-us-east-1}
+      SIGNOZ_ENABLED: "true"
+    depends_on:
+      - clickhouse
+    ports:
+      - "${SIGNOZ_QUERY_PORT:-8081}:8080"
+    networks:
+      - app-network
+
+  otel-collector:
+    image: signoz/signoz-otel-collector:${SIGNOZ_OTEL_COLLECTOR_TAG:-0.102.0}
+    container_name: demo-otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./monitoring/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "${OTEL_GRPC_PORT:-4317}:4317"
+      - "${OTEL_HTTP_PORT:-4318}:4318"
+      - "${OTEL_HEALTH_PORT:-13133}:13133"
+    depends_on:
+      - query-service
+    networks:
+      - app-network
+
+  signoz-frontend:
+    image: signoz/signoz-frontend:${SIGNOZ_FRONTEND_TAG:-0.57.0}
+    container_name: demo-signoz-ui
+    environment:
+      QUERY_SERVICE_URL: http://query-service:8080
+    ports:
+      - "${SIGNOZ_UI_PORT:-3301}:3301"
+    depends_on:
+      - query-service
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  clickhouse_data:
