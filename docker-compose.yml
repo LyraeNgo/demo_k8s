@@ -71,7 +71,8 @@ services:
     ports:
       - "${OTEL_GRPC_PORT:-4317}:4317"
       - "${OTEL_HTTP_PORT:-4318}:4318"
-      - "${OTEL_PROM_PORT:-8888}:8888"
+      - "${OTEL_INTERNAL_METRICS_PORT:-8888}:8888"
+      - "${OTEL_PROM_PORT:-8889}:8889"
       - "${OTEL_HEALTH_PORT:-13133}:13133"
     depends_on:
       - query-service
@@ -79,7 +80,7 @@ services:
       - app-network
 
   signoz-frontend:
-    image: signoz/signoz-frontend:${SIGNOZ_FRONTEND_TAG:-0.57.0}
+    image: signoz/frontend:${SIGNOZ_FRONTEND_TAG:-latest}
     container_name: demo-signoz-ui
     environment:
       QUERY_SERVICE_URL: http://query-service:8080
