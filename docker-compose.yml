@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   frontend:
     build:
@@ -26,39 +24,28 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-mock}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-demo-k8s-backend}
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     depends_on:
       - otel-collector
     networks:
       - app-network
 
-  clickhouse:
-    image: clickhouse/clickhouse-server:${CLICKHOUSE_TAG:-23.8.8-alpine}
-    container_name: demo-clickhouse
-    ports:
-      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
-      - "${CLICKHOUSE_NATIVE_PORT:-9000}:9000"
-    volumes:
-      - clickhouse_data:/var/lib/clickhouse
-    ulimits:
-      nofile: 262144
-    networks:
-      - app-network
-
-  query-service:
-    image: signoz/query-service:${SIGNOZ_TAG:-0.57.0}
-    container_name: demo-signoz-query
+  hyperdx:
+    image: hyperdx/hyperdx:latest
+    container_name: demo-hyperdx
     environment:
-      CLICKHOUSE_SERVER: clickhouse
-      CLICKHOUSE_PORT: 9000
-      QUERY_SERVICE_PORT: 8080
-      SIGNOZ_REGION: ${SIGNOZ_REGION:-us-east-1}
-      SIGNOZ_ENABLED: "true"
-    depends_on:
-      - clickhouse
+      HYPERDX_APP_PORT: 8080
+      HYPERDX_API_PORT: 8000
+      HYPERDX_OPAMP_PORT: 4320
+      HYPERDX_IMAGE: hyperdx
+      IS_LOCAL_APP_MODE: REQUIRED_AUTH
+      OTEL_SERVICE_NAME: demo-k8s-hyperdx
     ports:
-      - "${SIGNOZ_QUERY_PORT:-8081}:8080"
+      - "${HYPERDX_UI_PORT:-18080}:8080"
+      - "${HYPERDX_API_PORT:-18001}:8000"
+      - "${HYPERDX_OPAMP_PORT:-14320}:4320"
     networks:
       - app-network
 
@@ -73,19 +60,7 @@ services:
       - "${OTEL_HTTP_PORT:-4318}:4318"
       - "${OTEL_HEALTH_PORT:-13133}:13133"
     depends_on:
-      - query-service
-    networks:
-      - app-network
-
-  signoz-frontend:
-    image: signoz/signoz-frontend:${SIGNOZ_FRONTEND_TAG:-0.57.0}
-    container_name: demo-signoz-ui
-    environment:
-      QUERY_SERVICE_URL: http://query-service:8080
-    ports:
-      - "${SIGNOZ_UI_PORT:-3301}:3301"
-    depends_on:
-      - query-service
+      - hyperdx
     networks:
       - app-network
 
@@ -93,5 +68,4 @@ networks:
   app-network:
     driver: bridge
 
-volumes:
-  clickhouse_data:
+volumes: {}

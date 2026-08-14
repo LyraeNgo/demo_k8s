@@ -13,7 +13,7 @@ processors:
 
 exporters:
   otlp:
-    endpoint: query-service:4317
+    endpoint: hyperdx:4317
     tls:
       insecure: true
 
